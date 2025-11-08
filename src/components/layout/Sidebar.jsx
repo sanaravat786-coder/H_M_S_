@@ -1,13 +1,14 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, Users, BedDouble, CircleDollarSign, UserCheck, Wrench, FileText, X, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Users, BedDouble, CircleDollarSign, UserCheck, Wrench, FileText, X, Megaphone, UsersRound } from 'lucide-react';
 import Logo from '../ui/Logo';
 
 const adminNavLinks = [
     { icon: <LayoutDashboard />, text: 'Dashboard', path: '/' },
     { icon: <Users />, text: 'Students', path: '/students' },
     { icon: <BedDouble />, text: 'Rooms', path: '/rooms' },
+    { icon: <UsersRound />, text: 'Allocation', path: '/allocation' },
     { icon: <CircleDollarSign />, text: 'Fees', path: '/fees' },
     { icon: <UserCheck />, text: 'Visitors', path: '/visitors' },
     { icon: <Wrench />, text: 'Maintenance', path: '/maintenance' },
@@ -26,6 +27,7 @@ const studentNavLinks = [
 
 const staffNavLinks = [
     { icon: <LayoutDashboard />, text: 'Dashboard', path: '/' },
+    { icon: <UsersRound />, text: 'Allocation', path: '/allocation' },
     { icon: <UserCheck />, text: 'Visitors', path: '/visitors' },
     { icon: <Wrench />, text: 'Maintenance', path: '/maintenance' },
     { icon: <Megaphone />, text: 'Notices', path: '/notices' },

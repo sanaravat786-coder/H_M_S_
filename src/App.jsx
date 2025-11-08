@@ -18,6 +18,7 @@ import RoomDetailPage from './pages/details/RoomDetailPage';
 import FeeDetailPage from './pages/details/FeeDetailPage';
 import VisitorDetailPage from './pages/details/VisitorDetailPage';
 import MaintenanceDetailPage from './pages/details/MaintenanceDetailPage';
+import RoomAllocationPage from './pages/RoomAllocationPage';
 
 function App() {
     return (
@@ -32,6 +33,7 @@ function App() {
                         <Route path="/students/:id" element={<StudentDetailPage />} />
                         <Route path="/rooms" element={<RoomsPage />} />
                         <Route path="/rooms/:id" element={<RoomDetailPage />} />
+                        <Route path="/allocation" element={<RoomAllocationPage />} />
                         <Route path="/fees" element={<FeesPage />} />
                         <Route path="/fees/:id" element={<FeeDetailPage />} />
                         <Route path="/visitors" element={<VisitorsPage />} />

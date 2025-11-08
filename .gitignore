@@ -1,1 +1,33 @@
+# Dependencies
 node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+
+# Android build artifacts
+android/app/build/
+android/gradle/
+android/.gradle/
+*.apk
+
+# Environment variables
+.env.local
+.env.production
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp

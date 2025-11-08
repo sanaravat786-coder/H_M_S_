@@ -7,6 +7,7 @@ import Modal from '../components/ui/Modal';
 import EmptyState from '../components/ui/EmptyState';
 import toast from 'react-hot-toast';
 import { Loader, Edit, Trash2, Wrench } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const statusStyles = {
     Pending: 'bg-yellow-500/10 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400',
@@ -26,37 +27,39 @@ const itemVariants = {
 
 const MaintenancePage = () => {
     const [requests, setRequests] = useState([]);
-    const [students, setStudents] = useState([]);
+    const [profiles, setProfiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [formLoading, setFormLoading] = useState(false);
     const [currentRequest, setCurrentRequest] = useState(null);
+    const { user } = useAuth();
+    const userRole = user?.user_metadata?.role;
 
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [requestsResult, studentsResult] = await Promise.all([
+            const [requestsResult, profilesResult] = await Promise.all([
                  supabase
                     .from('maintenance_requests')
-                    .select('id, issue, room_number, reported_by_id, created_at, status, students(id, full_name)')
+                    .select('*, profiles:reported_by_id(full_name)')
                     .order('created_at', { ascending: false }),
                 supabase
-                    .from('students')
+                    .from('profiles')
                     .select('id, full_name')
                     .order('full_name')
             ]);
     
             if (requestsResult.error) throw requestsResult.error;
-            if (studentsResult.error) throw studentsResult.error;
+            if (profilesResult.error) throw profilesResult.error;
     
             setRequests(requestsResult.data || []);
-            setStudents(studentsResult.data || []);
+            setProfiles(profilesResult.data || []);
     
         } catch (error) {
             toast.error(`Failed to fetch data: ${error.message}`);
             console.error("Error fetching data:", error);
             setRequests([]);
-            setStudents([]);
+            setProfiles([]);
         } finally {
             setLoading(false);
         }
@@ -99,7 +102,7 @@ const MaintenancePage = () => {
             const { error: updateError } = await supabase.from('maintenance_requests').update(requestData).eq('id', currentRequest.id);
             error = updateError;
         } else {
-            const dataToInsert = { ...requestData, status: 'Pending' };
+            const dataToInsert = { ...requestData, reported_by_id: user.id, status: 'Pending' };
             const { error: insertError } = await supabase.from('maintenance_requests').insert([dataToInsert]);
             error = insertError;
         }
@@ -151,7 +154,7 @@ const MaintenancePage = () => {
                                             <Link to={`/maintenance/${req.id}`} className="text-primary hover:text-primary-focus dark:text-dark-primary dark:hover:text-dark-primary-focus">{req.issue}</Link>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-base-content-secondary dark:text-dark-base-content-secondary">{req.room_number}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-base-content-secondary dark:text-dark-base-content-secondary">{req.students?.full_name || 'N/A'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-base-content-secondary dark:text-dark-base-content-secondary">{req.profiles?.full_name || 'N/A'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-base-content-secondary dark:text-dark-base-content-secondary">{new Date(req.created_at).toLocaleDateString()}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                                             <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${statusStyles[req.status]}`}>
@@ -159,12 +162,16 @@ const MaintenancePage = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button onClick={() => openEditModal(req)} className="p-2 text-primary/70 hover:text-primary dark:text-dark-primary/70 dark:hover:text-dark-primary transition-colors">
-                                                <Edit className="w-5 h-5" />
-                                            </button>
-                                            <button onClick={() => handleDelete(req.id)} className="p-2 text-red-500/70 hover:text-red-500 dark:text-red-500/70 dark:hover:text-red-500 transition-colors">
-                                                <Trash2 className="w-5 h-5" />
-                                            </button>
+                                            {(userRole === 'Admin' || userRole === 'Staff') && (
+                                                <>
+                                                <button onClick={() => openEditModal(req)} className="p-2 text-primary/70 hover:text-primary dark:text-dark-primary/70 dark:hover:text-dark-primary transition-colors">
+                                                    <Edit className="w-5 h-5" />
+                                                </button>
+                                                <button onClick={() => handleDelete(req.id)} className="p-2 text-red-500/70 hover:text-red-500 dark:text-red-500/70 dark:hover:text-red-500 transition-colors">
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                                </>
+                                            )}
                                         </td>
                                     </motion.tr>
                                 ))}
@@ -194,16 +201,18 @@ const MaintenancePage = () => {
                     </div>
                     <div>
                         <label htmlFor="room_number" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">Room Number</label>
-                        <input type="number" name="room_number" id="room_number" defaultValue={currentRequest?.room_number || ''} required className="mt-1 block w-full rounded-md border-base-300 dark:border-dark-base-300 bg-base-100 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
+                        <input type="text" name="room_number" id="room_number" defaultValue={currentRequest?.room_number || ''} required className="mt-1 block w-full rounded-md border-base-300 dark:border-dark-base-300 bg-base-100 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content shadow-sm focus:border-primary focus:ring-primary sm:text-sm" />
                     </div>
-                    <div>
-                        <label htmlFor="reported_by_id" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">Reported By</label>
-                        <select id="reported_by_id" name="reported_by_id" defaultValue={currentRequest?.reported_by_id || ''} required className="mt-1 block w-full rounded-md border-base-300 dark:border-dark-base-300 bg-base-100 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content shadow-sm focus:border-primary focus:ring-primary sm:text-sm">
-                            <option value="">Select a student</option>
-                            {students.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-                        </select>
-                    </div>
-                    {currentRequest && (
+                    {(userRole === 'Admin' || userRole === 'Staff') && (
+                        <div>
+                            <label htmlFor="reported_by_id" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">Reported By</label>
+                            <select id="reported_by_id" name="reported_by_id" defaultValue={currentRequest?.reported_by_id || user.id} required className="mt-1 block w-full rounded-md border-base-300 dark:border-dark-base-300 bg-base-100 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content shadow-sm focus:border-primary focus:ring-primary sm:text-sm">
+                                <option value="">Select a user</option>
+                                {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                            </select>
+                        </div>
+                    )}
+                    {currentRequest && (userRole === 'Admin' || userRole === 'Staff') && (
                          <div>
                             <label htmlFor="status" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">Status</label>
                             <select id="status" name="status" defaultValue={currentRequest?.status} required className="mt-1 block w-full rounded-md border-base-300 dark:border-dark-base-300 bg-base-100 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content shadow-sm focus:border-primary focus:ring-primary sm:text-sm">

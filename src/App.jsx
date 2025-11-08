@@ -10,6 +10,7 @@ import FeesPage from './pages/FeesPage';
 import VisitorsPage from './pages/VisitorsPage';
 import MaintenancePage from './pages/MaintenancePage';
 import ReportsPage from './pages/ReportsPage';
+import NoticesPage from './pages/NoticesPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
 import StudentDetailPage from './pages/details/StudentDetailPage';
@@ -38,6 +39,7 @@ function App() {
                         <Route path="/maintenance" element={<MaintenancePage />} />
                         <Route path="/maintenance/:id" element={<MaintenanceDetailPage />} />
                         <Route path="/reports" element={<ReportsPage />} />
+                        <Route path="/notices" element={<NoticesPage />} />
                     </Route>
                 </Route>
             </Routes>

@@ -23,7 +23,7 @@ const MaintenanceDetailPage = () => {
             setLoading(true);
             const { data, error } = await supabase
                 .from('maintenance_requests')
-                .select('*, students(full_name)')
+                .select('*, profiles:reported_by_id(full_name)')
                 .eq('id', id)
                 .single();
 
@@ -49,7 +49,7 @@ const MaintenanceDetailPage = () => {
         <DetailPageLayout title={`Request: ${request.issue}`} backTo="/maintenance">
             <DetailItem label="Issue" value={request.issue} />
             <DetailItem label="Room Number" value={request.room_number} />
-            <DetailItem label="Reported By" value={request.students.full_name} />
+            <DetailItem label="Reported By" value={request.profiles?.full_name || 'N/A'} />
             <DetailItem label="Date Reported" value={new Date(request.created_at).toLocaleDateString()} />
             <DetailItem label="Status">
                 <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${statusStyles[request.status]}`}>

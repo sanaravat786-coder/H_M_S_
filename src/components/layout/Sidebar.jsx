@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, Users, BedDouble, CircleDollarSign, UserCheck, Wrench, FileText, X } from 'lucide-react';
+import { LayoutDashboard, Users, BedDouble, CircleDollarSign, UserCheck, Wrench, FileText, X, Megaphone } from 'lucide-react';
 import Logo from '../ui/Logo';
 
 const adminNavLinks = [
@@ -11,6 +11,7 @@ const adminNavLinks = [
     { icon: <CircleDollarSign />, text: 'Fees', path: '/fees' },
     { icon: <UserCheck />, text: 'Visitors', path: '/visitors' },
     { icon: <Wrench />, text: 'Maintenance', path: '/maintenance' },
+    { icon: <Megaphone />, text: 'Notices', path: '/notices' },
     { icon: <FileText />, text: 'Reports', path: '/reports' },
 ];
 
@@ -20,12 +21,14 @@ const studentNavLinks = [
     { icon: <CircleDollarSign />, text: 'My Fees', path: '/fees' },
     { icon: <UserCheck />, text: 'My Visitors', path: '/visitors' },
     { icon: <Wrench />, text: 'Maintenance', path: '/maintenance' },
+    { icon: <Megaphone />, text: 'Notices', path: '/notices' },
 ];
 
 const staffNavLinks = [
     { icon: <LayoutDashboard />, text: 'Dashboard', path: '/' },
     { icon: <UserCheck />, text: 'Visitors', path: '/visitors' },
     { icon: <Wrench />, text: 'Maintenance', path: '/maintenance' },
+    { icon: <Megaphone />, text: 'Notices', path: '/notices' },
 ];
 
 const NavItem = ({ link, setSidebarOpen }) => (
@@ -52,9 +55,9 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     if (role === 'Admin') {
         navLinks = adminNavLinks;
     } else if (role === 'Student') {
-        navLinks = studentNavLinks; // Corrected: Student gets student links
+        navLinks = studentNavLinks;
     } else if (role === 'Staff') {
-        navLinks = staffNavLinks; // Corrected: Staff gets staff links
+        navLinks = staffNavLinks;
     }
 
     return (

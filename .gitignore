@@ -6,12 +6,6 @@ package-lock.json
 dist/
 build/
 
-# Android build artifacts
-android/app/build/
-android/gradle/
-android/.gradle/
-*.apk
-
 # Environment variables
 .env
 .env.local

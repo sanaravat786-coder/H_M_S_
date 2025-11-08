@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">SmartHostel</string>
-    <string name="title_activity_main">SmartHostel</string>
-    <string name="package_name">com.HMS.app</string>
-    <string name="custom_url_scheme">com.HMS.app</string>
-</resources>

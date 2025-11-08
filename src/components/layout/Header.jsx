@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import ThemeToggle from '../ui/ThemeToggle';
 import UserAvatar from '../ui/UserAvatar';
+import GlobalSearch from '../search/GlobalSearch';
 
 const Header = ({ setSidebarOpen }) => {
     const { user } = useAuth();
@@ -22,14 +23,21 @@ const Header = ({ setSidebarOpen }) => {
     };
 
     return (
-        <header className="sticky top-0 flex items-center justify-between px-6 py-3 bg-base-100/80 dark:bg-dark-base-200/80 backdrop-blur-lg border-b border-base-300/50 dark:border-dark-base-300/50 transition-colors z-30">
-            <div className="flex items-center">
+        <header className="sticky top-0 grid grid-cols-3 items-center px-6 py-3 bg-base-100/80 dark:bg-dark-base-200/80 backdrop-blur-lg border-b border-base-300/50 dark:border-dark-base-300/50 transition-colors z-30">
+            {/* Left side */}
+            <div className="flex items-center justify-start">
                 <button onClick={() => setSidebarOpen(true)} className="text-base-content-secondary dark:text-dark-base-content-secondary focus:outline-none lg:hidden">
                     <Menu className="h-6 w-6" />
                 </button>
             </div>
 
-            <div className="flex items-center space-x-4">
+            {/* Middle */}
+            <div className="flex justify-center">
+                <GlobalSearch />
+            </div>
+
+            {/* Right side */}
+            <div className="flex items-center justify-end space-x-2 sm:space-x-4">
                 <ThemeToggle />
                 <div className="relative flex items-center space-x-3">
                     <UserAvatar user={user} />

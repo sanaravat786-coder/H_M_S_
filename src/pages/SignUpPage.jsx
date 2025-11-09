@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Users, Loader, Phone } from 'lucide-react';
+import { User, Mail, Lock, Users, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import Logo from '../components/ui/Logo';
@@ -11,7 +11,6 @@ function SignUpPage() {
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [mobileNumber, setMobileNumber] = useState('');
     const [role, setRole] = useState('Student');
     const [loading, setLoading] = useState(false);
 
@@ -19,6 +18,8 @@ function SignUpPage() {
         e.preventDefault();
         setLoading(true);
 
+        // Provide full_name and role in the metadata during sign-up.
+        // This is required by the backend trigger to create the user profile correctly.
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
@@ -26,22 +27,23 @@ function SignUpPage() {
                 data: {
                     full_name: fullName,
                     role: role,
-                    mobile_number: mobileNumber,
                 },
                 emailRedirectTo: `${window.location.origin}/`
             }
         });
 
+        setLoading(false);
+
         if (error) {
             toast.error(error.message);
         } else if (data.user && data.user.identities && data.user.identities.length === 0) {
-            toast.error('User with this email already exists.');
-        } else {
+            toast.error('An account with this email already exists. Please check for a confirmation email or try logging in.');
+        } else if (data.user) {
             toast.success('Registration successful! Please check your email to verify your account.');
             navigate('/login');
+        } else {
+            toast.error('An unknown error occurred during sign up.');
         }
-
-        setLoading(false);
     };
 
     return (
@@ -104,27 +106,6 @@ function SignUpPage() {
                                     onChange={(e) => setEmail(e.target.value)}
                                     className="block w-full rounded-lg border-base-300 dark:border-dark-base-300 bg-base-200 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content pl-10 py-3 focus:border-primary dark:focus:border-dark-primary focus:ring-primary dark:focus:ring-dark-primary sm:text-sm"
                                     placeholder="you@example.com"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label htmlFor="mobileNumber" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">
-                                Mobile Number
-                            </label>
-                            <div className="mt-1 relative rounded-md shadow-sm">
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                    <Phone className="h-5 w-5 text-gray-400" />
-                                </div>
-                                <input
-                                    type="tel"
-                                    name="mobileNumber"
-                                    id="mobileNumber"
-                                    value={mobileNumber}
-                                    onChange={(e) => setMobileNumber(e.target.value)}
-                                    className="block w-full rounded-lg border-base-300 dark:border-dark-base-300 bg-base-200 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content pl-10 py-3 focus:border-primary dark:focus:border-dark-primary focus:ring-primary dark:focus:ring-dark-primary sm:text-sm"
-                                    placeholder="+1 234 567 890"
                                     required
                                 />
                             </div>

@@ -28,8 +28,6 @@ export const AuthProvider = ({ children }) => {
       async (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        // The logic for creating a user profile has been moved to a database trigger
-        // for reliability and atomicity. The client-side RPC call is no longer needed.
         setLoading(false);
       }
     );

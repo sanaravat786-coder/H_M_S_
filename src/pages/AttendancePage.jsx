@@ -1,258 +1,220 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import toast from 'react-hot-toast';
-import { Loader, Users, FileDown } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
-import EmptyState from '../components/ui/EmptyState';
-import SegmentedControl from '../components/ui/SegmentedControl';
-import { useDebounce } from '../hooks/useDebounce';
-import Papa from 'papaparse';
-
-const today = new Date().toISOString().split('T')[0];
+import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import { Check, X, Clock, Calendar as CalendarIcon, Sun, Moon, PalmTree, User, Loader } from 'lucide-react';
 
 const AttendancePage = () => {
-    const [filters, setFilters] = useState({ date: today, sessionType: 'NightRoll', course: '', year: '', searchTerm: '' });
     const [students, setStudents] = useState([]);
-    const [records, setRecords] = useState({});
-    const [session, setSession] = useState(null);
+    const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+    const [session, setSession] = useState('morning');
+    const [attendance, setAttendance] = useState({});
     const [loading, setLoading] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const debouncedSearchTerm = useDebounce(filters.searchTerm, 300);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
 
-    const handleFilterChange = (key, value) => {
-        setFilters(prev => ({ ...prev, [key]: value }));
-    };
+    useEffect(() => {
+        fetchStudents();
+    }, []);
 
-
-    const loadSessionAndStudents = useCallback(async () => {
-        if (!filters.date || !filters.sessionType) {
-            toast.error('Please select a date and session type.');
-            return;
+    useEffect(() => {
+        if (students.length > 0) {
+            fetchAttendance();
         }
+    }, [date, session, students]);
+
+    const fetchStudents = async () => {
         setLoading(true);
-        try {
-            // 1. Get or create the session
-            const { data: sessionId, error: sessionError } = await supabase.rpc('get_or_create_session', {
-                p_date: filters.date,
-                p_type: filters.sessionType,
-                p_course: filters.course || null,
-                p_year: filters.year || null,
-            });
-            if (sessionError) throw sessionError;
-            setSession({ id: sessionId });
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .eq('role', 'student')
+            .order('full_name');
 
-            // 2. Fetch students based on filters
-            let studentQuery = supabase.from('students').select('id, full_name, room_allocations(rooms(room_number))').order('full_name');
-            if (filters.course) studentQuery = studentQuery.eq('course', filters.course);
-            if (filters.year) studentQuery = studentQuery.eq('year', filters.year);
-            const { data: studentsData, error: studentsError } = await studentQuery;
-            if (studentsError) throw studentsError;
-            setStudents(studentsData || []);
-
-            // 3. Fetch existing records for this session
-            const { data: recordsData, error: recordsError } = await supabase.from('attendance_records').select('*').eq('session_id', sessionId);
-            if (recordsError) throw recordsError;
-            
-            const initialRecords = (recordsData || []).reduce((acc, rec) => {
-                acc[rec.student_id] = { status: rec.status, note: rec.note || '', late_minutes: rec.late_minutes || 0 };
+        if (error) {
+            setError('Failed to fetch students.');
+            console.error(error);
+        } else {
+            setStudents(data);
+            const initialAttendance = data.reduce((acc, student) => {
+                acc[student.id] = 'Present';
                 return acc;
             }, {});
-            setRecords(initialRecords);
+            setAttendance(initialAttendance);
+        }
+        setLoading(false);
+    };
 
-        } catch (error) {
-            toast.error(`Failed to load session: ${error.message}`);
-        } finally {
+    const fetchAttendance = async () => {
+        setLoading(true);
+        setError('');
+        const { data: sessionData, error: sessionError } = await supabase.rpc('get_or_create_session', {
+            p_date: date,
+            p_session_type: session
+        });
+
+        if (sessionError) {
+            setError('Failed to get or create attendance session.');
+            console.error(sessionError);
             setLoading(false);
-        }
-    }, [filters.date, filters.sessionType, filters.course, filters.year]);
-    
-    const handleRecordChange = (studentId, key, value) => {
-        setRecords(prev => ({
-            ...prev,
-            [studentId]: {
-                ...prev[studentId],
-                status: prev[studentId]?.status || 'Present', // Default to present if not set
-                [key]: value
-            }
-        }));
-    };
-
-    const handleBulkMark = (status) => {
-        const newRecords = { ...records };
-        filteredStudents.forEach(student => {
-            newRecords[student.id] = { ...newRecords[student.id], status };
-        });
-        setRecords(newRecords);
-        toast.success(`Marked all visible students as ${status}`);
-    };
-
-    const handleSave = async () => {
-        if (!session) {
-            toast.error('No active session. Please load a session first.');
             return;
         }
-        setSaving(true);
-        const recordsToSave = Object.entries(records).map(([student_id, data]) => ({
-            student_id,
-            status: data.status,
-            note: data.note || null,
-            late_minutes: data.status === 'Late' ? (data.late_minutes || 0) : 0,
-        }));
 
-        try {
-            const { error } = await supabase.rpc('bulk_mark_attendance', {
-                p_session_id: session.id,
-                p_records: recordsToSave,
+        const { data: attendanceData, error: attendanceError } = await supabase
+            .from('attendance_records')
+            .select('student_id, status')
+            .eq('session_id', sessionData);
+
+        if (attendanceError) {
+            setError('Failed to fetch attendance records.');
+            console.error(attendanceError);
+        } else {
+            const newAttendance = { ...attendance };
+            students.forEach(student => {
+                const record = attendanceData.find(a => a.student_id === student.id);
+                newAttendance[student.id] = record ? record.status : 'Present';
             });
-            if (error) throw error;
-            toast.success('Attendance saved successfully!');
-        } catch (error) {
-            toast.error(`Failed to save: ${error.message}`);
-        } finally {
-            setSaving(false);
+            setAttendance(newAttendance);
         }
+        setLoading(false);
     };
 
-    const handleExport = () => {
-        if (students.length === 0) {
-            toast.error("No data to export.");
+    const handleAttendanceChange = (studentId, status) => {
+        setAttendance(prev => ({ ...prev, [studentId]: status }));
+    };
+    
+    const statuses = ['Present', 'Absent', 'Leave', 'Holiday'];
+    const statusIcons = {
+        'Present': <Check className="h-5 w-5 text-green-500" />,
+        'Absent': <X className="h-5 w-5 text-red-500" />,
+        'Leave': <Clock className="h-5 w-5 text-yellow-500" />,
+        'Holiday': <PalmTree className="h-5 w-5 text-blue-500" />
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        setSuccess('');
+
+        const { data: sessionData, error: sessionError } = await supabase.rpc('get_or_create_session', {
+            p_date: date,
+            p_session_type: session
+        });
+
+        if (sessionError) {
+            setError('Failed to get or create attendance session.');
+            console.error(sessionError);
+            setLoading(false);
             return;
         }
-        const exportData = students.map(student => {
-            const record = records[student.id] || { status: 'Unmarked', note: '', late_minutes: 0 };
-            return {
-                "Student Name": student.full_name,
-                "Room": student.room_allocations[0]?.rooms?.room_number || 'N/A',
-                "Status": record.status,
-                "Late (Mins)": record.late_minutes,
-                "Note": record.note,
-            };
-        });
-        const csv = Papa.unparse(exportData);
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `attendance_${filters.date}_${filters.sessionType}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success("CSV export downloaded.");
-    };
 
-    const filteredStudents = students.filter(student =>
-        student.full_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
-    );
-    
-    const statusOptions = [
-        { label: 'Present', value: 'Present' },
-        { label: 'Absent', value: 'Absent' },
-        { label: 'Late', value: 'Late' },
-        { label: 'Excused', value: 'Excused' },
-    ];
+        const records = Object.entries(attendance).map(([student_id, status]) => ({
+            session_id: sessionData,
+            student_id,
+            status,
+        }));
+
+        const { error: upsertError } = await supabase
+            .from('attendance_records')
+            .upsert(records, { onConflict: 'session_id, student_id' });
+
+        if (upsertError) {
+            setError('Failed to save attendance.');
+            console.error(upsertError);
+        } else {
+            setSuccess('Attendance saved successfully!');
+        }
+
+        setLoading(false);
+        setTimeout(() => setSuccess(''), 3000);
+    };
 
     return (
         <>
             <PageHeader title="Mark Attendance" />
             
-            {/* Toolbar */}
-            <div className="bg-base-100 dark:bg-dark-base-200 p-4 rounded-xl shadow-lg mb-6 sticky top-24 z-20">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <form onSubmit={handleSubmit} className="bg-base-100 dark:bg-dark-base-200 p-6 rounded-2xl shadow-lg border border-base-200 dark:border-dark-base-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div>
-                        <label className="text-xs font-medium text-base-content-secondary">Date</label>
-                        <input type="date" value={filters.date} onChange={e => handleFilterChange('date', e.target.value)} className="input" />
-                    </div>
-                    <div>
-                        <label className="text-xs font-medium text-base-content-secondary">Session Type</label>
-                        <select value={filters.sessionType} onChange={e => handleFilterChange('sessionType', e.target.value)} className="input">
-                            <option>NightRoll</option>
-                            <option>Morning</option>
-                            <option>Evening</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-xs font-medium text-base-content-secondary">Course (Optional)</label>
-                        <input type="text" placeholder="e.g. B.Tech" value={filters.course} onChange={e => handleFilterChange('course', e.target.value)} className="input" />
-                    </div>
-                    <button onClick={loadSessionAndStudents} disabled={loading} className="btn-primary py-2.5">
-                        {loading ? <Loader className="animate-spin" /> : 'Load Session'}
-                    </button>
-                </div>
-                {session && (
-                    <div className="mt-4 pt-4 border-t border-base-200 dark:border-dark-base-300 flex flex-wrap gap-2 items-center justify-between">
-                         <input type="text" placeholder="Search students..." value={filters.searchTerm} onChange={e => handleFilterChange('searchTerm', e.target.value)} className="input w-full md:w-auto" />
-                        <div className="flex gap-2">
-                            <button onClick={() => handleBulkMark('Present')} className="btn-secondary">Mark All Present</button>
-                            <button onClick={handleSave} disabled={saving} className="btn-primary">
-                                {saving ? <Loader className="animate-spin" /> : 'Save Attendance'}
-                            </button>
-                             <button onClick={handleExport} className="btn-outline p-2"><FileDown className="w-5 h-5" /></button>
+                        <label htmlFor="date" className="block text-sm font-medium text-base-content-secondary mb-1">Date</label>
+                        <div className="relative">
+                            <input
+                                type="date"
+                                id="date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-base-300 dark:border-dark-base-300 rounded-lg bg-base-100 dark:bg-dark-base-200 focus:ring-primary focus:border-primary"
+                            />
+                            <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-base-content-secondary" />
                         </div>
                     </div>
-                )}
-            </div>
-
-            {/* Attendance Table */}
-            <div className="bg-base-100 dark:bg-dark-base-200 rounded-xl shadow-lg overflow-hidden">
-                {loading ? (
-                    <div className="flex justify-center items-center h-64"><Loader className="animate-spin h-8 w-8 text-primary" /></div>
-                ) : filteredStudents.length > 0 ? (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full">
-                            <thead className="bg-base-200/50 dark:bg-dark-base-300/50">
-                                <tr>
-                                    <th className="th">Student Name</th>
-                                    <th className="th">Room</th>
-                                    <th className="th w-1/3">Status</th>
-                                    <th className="th">Details</th>
-                                </tr>
-                            </thead>
-                            <motion.tbody className="divide-y divide-base-200 dark:divide-dark-base-300">
-                                {filteredStudents.map(student => (
-                                    <motion.tr key={student.id} layout className="hover:bg-base-200/50 dark:hover:bg-dark-base-300/50">
-                                        <td className="td font-semibold">{student.full_name}</td>
-                                        <td className="td">{student.room_allocations[0]?.rooms?.room_number || 'N/A'}</td>
-                                        <td className="td">
-                                            <SegmentedControl
-                                                options={statusOptions}
-                                                value={records[student.id]?.status || 'Present'}
-                                                onChange={status => handleRecordChange(student.id, 'status', status)}
-                                            />
-                                        </td>
-                                        <td className="td">
-                                            <div className="flex gap-2">
-                                                {records[student.id]?.status === 'Late' && (
-                                                    <input
-                                                        type="number"
-                                                        placeholder="Mins"
-                                                        value={records[student.id]?.late_minutes || ''}
-                                                        onChange={e => handleRecordChange(student.id, 'late_minutes', e.target.value)}
-                                                        className="input w-20"
-                                                    />
-                                                )}
-                                                <input
-                                                    type="text"
-                                                    placeholder="Note..."
-                                                    value={records[student.id]?.note || ''}
-                                                    onChange={e => handleRecordChange(student.id, 'note', e.target.value)}
-                                                    className="input w-full"
-                                                />
-                                            </div>
-                                        </td>
-                                    </motion.tr>
-                                ))}
-                            </motion.tbody>
-                        </table>
+                    <div>
+                        <label htmlFor="session" className="block text-sm font-medium text-base-content-secondary mb-1">Session</label>
+                        <div className="flex items-center space-x-2 bg-base-200 dark:bg-dark-base-300 border border-base-200 dark:border-dark-base-300 p-1 rounded-lg">
+                            <button type="button" onClick={() => setSession('morning')} className={`flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors ${session === 'morning' ? 'bg-base-100 dark:bg-dark-base-200 shadow-sm text-primary' : 'hover:bg-base-300/50 dark:hover:bg-dark-base-100/50'}`}>
+                                <Sun className="h-4 w-4" /> Morning
+                            </button>
+                            <button type="button" onClick={() => setSession('evening')} className={`flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors ${session === 'evening' ? 'bg-base-100 dark:bg-dark-base-200 shadow-sm text-primary' : 'hover:bg-base-300/50 dark:hover:bg-dark-base-100/50'}`}>
+                                <Moon className="h-4 w-4" /> Evening
+                            </button>
+                        </div>
                     </div>
-                ) : (
-                    <EmptyState
-                        icon={<Users className="w-full h-full" />}
-                        title="No Students Found"
-                        message={session ? "No students match the current filters." : "Load a session to begin marking attendance."}
-                    />
-                )}
-            </div>
+                </div>
+
+                {error && <Alert variant="destructive" className="mb-4"><AlertTitle>Error</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
+                {success && <Alert variant="success" className="mb-4"><AlertTitle>Success</AlertTitle><AlertDescription>{success}</AlertDescription></Alert>}
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-base-200 dark:divide-dark-base-300">
+                        <thead className="bg-base-200/50 dark:bg-dark-base-300/50">
+                            <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-base-content-secondary uppercase tracking-wider">Student</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-base-content-secondary uppercase tracking-wider">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-base-100 dark:bg-dark-base-200 divide-y divide-base-200 dark:divide-dark-base-300">
+                            {loading && !students.length ? (
+                                <tr><td colSpan="2" className="text-center py-4"><Loader className="animate-spin mx-auto" /></td></tr>
+                            ) : students.map((student) => (
+                                <tr key={student.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center">
+                                            <User className="h-5 w-5 mr-3 text-base-content-secondary" />
+                                            <span className="font-medium">{student.full_name}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center space-x-2">
+                                            {statuses.map(status => (
+                                                <button
+                                                    key={status}
+                                                    type="button"
+                                                    onClick={() => handleAttendanceChange(student.id, status)}
+                                                    className={`p-2 rounded-full transition-transform transform hover:scale-110 ${attendance[student.id] === status ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-100 dark:ring-offset-dark-base-200' : 'opacity-50 hover:opacity-100'}`}
+                                                    title={status}
+                                                >
+                                                    {statusIcons[status]}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="mt-6 flex justify-end">
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-primary-content bg-primary hover:bg-primary-focus focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50"
+                    >
+                        {loading ? <Loader className="animate-spin h-5 w-5 mr-2" /> : null}
+                        {loading ? 'Saving...' : 'Save Attendance'}
+                    </button>
+                </div>
+            </form>
         </>
     );
 };

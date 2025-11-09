@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { BedDouble, User, Wrench, Loader, Edit, Trash2 } from 'lucide-react';
+import { BedDouble, Users, Loader, Edit, Trash2 } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Modal from '../components/ui/Modal';
 import EmptyState from '../components/ui/EmptyState';
@@ -26,33 +26,42 @@ const itemVariants = {
 
 const RoomsPage = () => {
     const [rooms, setRooms] = useState([]);
+    const [allocations, setAllocations] = useState({});
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [formLoading, setFormLoading] = useState(false);
     const [currentRoom, setCurrentRoom] = useState(null);
 
-    const fetchRooms = async () => {
+    const fetchData = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('rooms')
-                .select('id, room_number, type, status, occupants')
-                .order('room_number', { ascending: true });
+            const [roomsRes, allocationsRes] = await Promise.all([
+                supabase.from('rooms').select('*').order('room_number'),
+                supabase.from('room_allocations').select('room_id').eq('is_active', true)
+            ]);
             
-            if (error) throw error;
-            
-            setRooms(data || []);
+            if (roomsRes.error) throw roomsRes.error;
+            if (allocationsRes.error) throw allocationsRes.error;
+
+            const allocationsByRoom = (allocationsRes.data || []).reduce((acc, alloc) => {
+                acc[alloc.room_id] = (acc[alloc.room_id] || 0) + 1;
+                return acc;
+            }, {});
+
+            setRooms(roomsRes.data || []);
+            setAllocations(allocationsByRoom);
         } catch (error) {
-            toast.error(`Failed to fetch rooms: ${error.message}`);
-            console.error("Error fetching rooms:", error);
+            toast.error(`Failed to fetch data: ${error.message}`);
+            console.error("Error fetching data:", error);
             setRooms([]);
+            setAllocations({});
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchRooms();
+        fetchData();
     }, []);
 
     const openAddModal = () => {
@@ -66,9 +75,9 @@ const RoomsPage = () => {
     };
 
     const handleDelete = async (roomId) => {
-        const roomToDelete = rooms.find(r => r.id === roomId);
-        if (roomToDelete && roomToDelete.status === 'Occupied') {
-            toast.error('Cannot delete an occupied room. Please reassign students first.');
+        const currentOccupants = allocations[roomId] || 0;
+        if (currentOccupants > 0) {
+            toast.error('Cannot delete an occupied room. Please deallocate students first.');
             return;
         }
 
@@ -79,7 +88,7 @@ const RoomsPage = () => {
                 toast.error(`Failed to delete room: ${error.message}`);
             } else {
                 toast.success('Room deleted successfully.');
-                fetchRooms();
+                fetchData();
             }
             setLoading(false);
         }
@@ -91,18 +100,31 @@ const RoomsPage = () => {
         const formData = new FormData(e.target);
         const roomData = Object.fromEntries(formData.entries());
 
+        const getCapacity = (type) => {
+            if (type === 'Triple') return 3;
+            if (type === 'Double') return 2;
+            return 1;
+        };
+
         const dataToSubmit = {
             room_number: roomData.roomNumber,
             type: roomData.type,
             status: roomData.status || 'Vacant',
+            occupants: getCapacity(roomData.type),
         };
 
         let error;
         if (currentRoom) {
+            const currentOccupants = allocations[currentRoom.id] || 0;
+            if (currentOccupants > dataToSubmit.occupants) {
+                toast.error(`Cannot change type. Room has ${currentOccupants} occupants, exceeding new capacity of ${dataToSubmit.occupants}.`);
+                setFormLoading(false);
+                return;
+            }
             const { error: updateError } = await supabase.from('rooms').update(dataToSubmit).eq('id', currentRoom.id);
             error = updateError;
         } else {
-            const { error: insertError } = await supabase.from('rooms').insert([{ ...dataToSubmit, occupants: 0 }]);
+            const { error: insertError } = await supabase.from('rooms').insert([dataToSubmit]);
             error = insertError;
         }
 
@@ -111,7 +133,7 @@ const RoomsPage = () => {
         } else {
             toast.success(`Room ${currentRoom ? 'updated' : 'added'} successfully!`);
             setIsModalOpen(false);
-            fetchRooms();
+            fetchData();
         }
         setFormLoading(false);
     };
@@ -134,43 +156,44 @@ const RoomsPage = () => {
                     initial="hidden"
                     animate="visible"
                 >
-                    {rooms.map(room => (
-                        <motion.div
-                            key={room.id}
-                            variants={itemVariants}
-                            whileHover={{ y: -5, scale: 1.03 }}
-                            transition={{ type: 'spring', stiffness: 300 }}
-                            className="relative bg-base-100 dark:bg-dark-base-200 rounded-2xl shadow-lg p-5 flex flex-col justify-between h-full transition-all duration-300"
-                        >
-                             <div className="absolute top-3 right-3 flex space-x-1">
-                                <button onClick={() => openEditModal(room)} className="p-1.5 rounded-full text-primary/70 hover:text-primary hover:bg-primary/10 dark:text-dark-primary/70 dark:hover:text-dark-primary dark:hover:bg-dark-primary/10 transition-colors" aria-label="Edit Room">
-                                    <Edit className="w-4 h-4" />
-                                </button>
-                                <button onClick={() => handleDelete(room.id)} className="p-1.5 rounded-full text-red-500/70 hover:text-red-500 hover:bg-red-500/10 transition-colors" aria-label="Delete Room">
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                            <div>
-                                <div className="flex justify-between items-start">
-                                    <Link to={`/rooms/${room.id}`} className="text-primary hover:text-primary-focus dark:text-dark-primary dark:hover:text-dark-primary-focus">
-                                        <h3 className="text-lg font-bold font-heading text-base-content dark:text-dark-base-content pr-16">Room {room.room_number}</h3>
-                                    </Link>
-                                    <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${statusStyles[room.status]}`}>
-                                        {room.status}
+                    {rooms.map(room => {
+                        const currentOccupants = allocations[room.id] || 0;
+                        return (
+                            <motion.div
+                                key={room.id}
+                                variants={itemVariants}
+                                whileHover={{ y: -5, scale: 1.03 }}
+                                transition={{ type: 'spring', stiffness: 300 }}
+                                className="relative bg-base-100 dark:bg-dark-base-200 rounded-2xl shadow-lg p-5 flex flex-col justify-between h-full transition-all duration-300"
+                            >
+                                <div className="absolute top-3 right-3 flex space-x-1">
+                                    <button onClick={() => openEditModal(room)} className="p-1.5 rounded-full text-primary/70 hover:text-primary hover:bg-primary/10 dark:text-dark-primary/70 dark:hover:text-dark-primary dark:hover:bg-dark-primary/10 transition-colors" aria-label="Edit Room">
+                                        <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => handleDelete(room.id)} className="p-1.5 rounded-full text-red-500/70 hover:text-red-500 hover:bg-red-500/10 transition-colors" aria-label="Delete Room">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <div>
+                                    <div className="flex justify-between items-start">
+                                        <Link to={`/rooms/${room.id}`} className="text-primary hover:text-primary-focus dark:text-dark-primary dark:hover:text-dark-primary-focus">
+                                            <h3 className="text-lg font-bold font-heading text-base-content dark:text-dark-base-content pr-16">Room {room.room_number}</h3>
+                                        </Link>
+                                        <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${statusStyles[room.status]}`}>
+                                            {room.status}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-base-content-secondary dark:text-dark-base-content-secondary mt-1">{room.type}</p>
+                                </div>
+                                <div className="mt-4 flex items-center text-sm text-base-content-secondary dark:text-dark-base-content-secondary">
+                                    <Users className="w-4 h-4 mr-2" />
+                                    <span>
+                                        {currentOccupants} / {room.occupants} Occupants
                                     </span>
                                 </div>
-                                <p className="text-sm text-base-content-secondary dark:text-dark-base-content-secondary mt-1">{room.type}</p>
-                            </div>
-                            <div className="mt-4 flex items-center text-sm text-base-content-secondary dark:text-dark-base-content-secondary">
-                                {room.status === 'Occupied' && <User className="w-4 h-4 mr-2" />}
-                                {room.status === 'Vacant' && <BedDouble className="w-4 h-4 mr-2" />}
-                                {room.status === 'Maintenance' && <Wrench className="w-4 h-4 mr-2" />}
-                                <span>
-                                    {room.status === 'Occupied' ? `${room.occupants} Occupant(s)` : room.status === 'Vacant' ? 'Available' : 'Under Repair'}
-                                </span>
-                            </div>
-                        </motion.div>
-                    ))}
+                            </motion.div>
+                        )
+                    })}
                 </motion.div>
             ) : (
                 <div className="bg-base-100 dark:bg-dark-base-200 rounded-2xl shadow-lg">

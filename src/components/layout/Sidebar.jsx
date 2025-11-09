@@ -1,11 +1,12 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, Users, BedDouble, CircleDollarSign, UserCheck, Wrench, FileText, X, Megaphone, UsersRound, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, Users, BedDouble, CircleDollarSign, UserCheck, Wrench, FileText, X, Megaphone, UsersRound, ClipboardCheck, User } from 'lucide-react';
 import Logo from '../ui/Logo';
 
 const adminNavLinks = [
     { icon: <LayoutDashboard />, text: 'Dashboard', path: '/' },
+    { icon: <User />, text: 'My Profile', path: '/profile' },
     { icon: <Users />, text: 'Students', path: '/students' },
     { icon: <BedDouble />, text: 'Rooms', path: '/rooms' },
     { icon: <UsersRound />, text: 'Allocation', path: '/allocation' },
@@ -19,6 +20,7 @@ const adminNavLinks = [
 
 const studentNavLinks = [
     { icon: <LayoutDashboard />, text: 'Dashboard', path: '/' },
+    { icon: <User />, text: 'My Profile', path: '/profile' },
     { icon: <ClipboardCheck />, text: 'My Attendance', path: '/my-attendance' },
     { icon: <BedDouble />, text: 'My Room', path: '/rooms' },
     { icon: <CircleDollarSign />, text: 'My Fees', path: '/fees' },
@@ -29,6 +31,7 @@ const studentNavLinks = [
 
 const staffNavLinks = [
     { icon: <LayoutDashboard />, text: 'Dashboard', path: '/' },
+    { icon: <User />, text: 'My Profile', path: '/profile' },
     { icon: <UsersRound />, text: 'Allocation', path: '/allocation' },
     { icon: <ClipboardCheck />, text: 'Attendance', path: '/attendance' },
     { icon: <UserCheck />, text: 'Visitors', path: '/visitors' },

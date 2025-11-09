@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import PageHeader from '../components/ui/PageHeader';
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
-import { Check, X, Clock, Calendar as CalendarIcon, Sun, Moon, PalmTree, User, Loader } from 'lucide-react';
+import { Check, X, Clock, Calendar as CalendarIcon, Sun, Moon, TreePalm, User, Loader } from 'lucide-react';
 
 const AttendancePage = () => {
     const [students, setStudents] = useState([]);
     const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
     const [session, setSession] = useState('morning');
     const [attendance, setAttendance] = useState({});
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
@@ -69,7 +69,7 @@ const AttendancePage = () => {
             setError('Failed to fetch attendance records.');
             console.error(attendanceError);
         } else {
-            const newAttendance = { ...attendance };
+            const newAttendance = {};
             students.forEach(student => {
                 const record = attendanceData.find(a => a.student_id === student.id);
                 newAttendance[student.id] = record ? record.status : 'Present';
@@ -88,7 +88,7 @@ const AttendancePage = () => {
         'Present': <Check className="h-5 w-5 text-green-500" />,
         'Absent': <X className="h-5 w-5 text-red-500" />,
         'Leave': <Clock className="h-5 w-5 text-yellow-500" />,
-        'Holiday': <PalmTree className="h-5 w-5 text-blue-500" />
+        'Holiday': <TreePalm className="h-5 w-5 text-blue-500" />
     };
 
     const handleSubmit = async (e) => {
@@ -175,7 +175,24 @@ const AttendancePage = () => {
                         </thead>
                         <tbody className="bg-base-100 dark:bg-dark-base-200 divide-y divide-base-200 dark:divide-dark-base-300">
                             {loading && !students.length ? (
-                                <tr><td colSpan="2" className="text-center py-4"><Loader className="animate-spin mx-auto" /></td></tr>
+                                [...Array(5)].map((_, i) => (
+                                    <tr key={i}>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
+                                                <div className="ml-4 h-4 w-40 bg-base-200 dark:bg-dark-base-300 rounded animate-pulse"></div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center space-x-2">
+                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
+                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
+                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
+                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
                             ) : students.map((student) => (
                                 <tr key={student.id}>
                                     <td className="px-6 py-4 whitespace-nowrap">

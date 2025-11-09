@@ -21,6 +21,7 @@ import MaintenanceDetailPage from './pages/details/MaintenanceDetailPage';
 import RoomAllocationPage from './pages/RoomAllocationPage';
 import AttendancePage from './pages/AttendancePage';
 import MyAttendancePage from './pages/MyAttendancePage';
+import ProfilePage from './pages/ProfilePage';
 
 function App() {
     return (
@@ -46,6 +47,7 @@ function App() {
                         <Route path="/notices" element={<NoticesPage />} />
                         <Route path="/attendance" element={<AttendancePage />} />
                         <Route path="/my-attendance" element={<MyAttendancePage />} />
+                        <Route path="/profile" element={<ProfilePage />} />
                     </Route>
                 </Route>
             </Routes>

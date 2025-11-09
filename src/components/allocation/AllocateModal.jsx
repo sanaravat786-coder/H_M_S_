@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import Modal from '../ui/Modal';
-import { Loader, Search, UserPlus } from 'lucide-react';
+import { Loader, Search, UserPlus, Phone } from 'lucide-react';
 import { useDebounce } from '../../hooks/useDebounce';
 
 const AllocateModal = ({ isOpen, onClose, room, onAllocationSuccess }) => {
@@ -38,9 +38,11 @@ const AllocateModal = ({ isOpen, onClose, room, onAllocationSuccess }) => {
 
     const filteredStudents = useMemo(() => {
         if (!debouncedSearchTerm) return students;
+        const lowercasedTerm = debouncedSearchTerm.toLowerCase();
         return students.filter(student =>
-            student.full_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-            student.email.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+            student.full_name.toLowerCase().includes(lowercasedTerm) ||
+            student.email.toLowerCase().includes(lowercasedTerm) ||
+            (student.contact && student.contact.toLowerCase().includes(lowercasedTerm))
         );
     }, [students, debouncedSearchTerm]);
 
@@ -76,7 +78,7 @@ const AllocateModal = ({ isOpen, onClose, room, onAllocationSuccess }) => {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-base-content-secondary" />
                     <input
                         type="text"
-                        placeholder="Search by name or email..."
+                        placeholder="Search by name, email, or mobile..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 rounded-lg bg-base-200 dark:bg-dark-base-300 focus:ring-2 focus:ring-primary focus:border-primary transition"
@@ -101,6 +103,12 @@ const AllocateModal = ({ isOpen, onClose, room, onAllocationSuccess }) => {
                                         <span className="text-xs text-base-content-secondary">{student.course}</span>
                                     </div>
                                     <p className="text-sm text-base-content-secondary">{student.email}</p>
+                                    {student.contact && (
+                                        <p className="flex items-center text-sm text-base-content-secondary mt-1">
+                                            <Phone className="w-3 h-3 mr-1.5" />
+                                            {student.contact}
+                                        </p>
+                                    )}
                                 </li>
                             ))}
                         </ul>

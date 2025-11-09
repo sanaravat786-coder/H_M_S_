@@ -1,5 +1,5 @@
 import React from 'react';
-import { BedDouble, Users, UserX, Info } from 'lucide-react';
+import { BedDouble, Users, UserX, Info, Phone } from 'lucide-react';
 
 const statusStyles = {
     Occupied: 'bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-400',
@@ -31,6 +31,12 @@ const RoomAllocationDetail = ({ room, allocations, onDeallocate }) => {
                             <div>
                                 <p className="font-semibold">{alloc.students.full_name}</p>
                                 <p className="text-sm text-base-content-secondary">{alloc.students.course}</p>
+                                {alloc.students.contact && (
+                                    <p className="flex items-center text-sm text-base-content-secondary mt-1">
+                                        <Phone className="w-3 h-3 mr-1.5" />
+                                        {alloc.students.contact}
+                                    </p>
+                                )}
                             </div>
                             <button
                                 onClick={() => onDeallocate(alloc.id, alloc.students.full_name)}

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/ui/PageHeader';
-import { Check, X, Clock, PalmTree, ChevronLeft, ChevronRight, Download, Loader } from 'lucide-react';
+import { Check, X, Clock, TreePalm, ChevronLeft, ChevronRight, Download, Loader } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'; // Assuming alert component exists
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -108,7 +108,7 @@ const MyAttendancePage = () => {
         'Present': { icon: <Check className="h-5 w-5" />, color: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300', ring: 'ring-green-500' },
         'Absent': { icon: <X className="h-5 w-5" />, color: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300', ring: 'ring-red-500' },
         'Leave': { icon: <Clock className="h-5 w-5" />, color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300', ring: 'ring-yellow-500' },
-        'Holiday': { icon: <PalmTree className="h-5 w-5" />, color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300', ring: 'ring-blue-500' },
+        'Holiday': { icon: <TreePalm className="h-5 w-5" />, color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300', ring: 'ring-blue-500' },
     };
 
     const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

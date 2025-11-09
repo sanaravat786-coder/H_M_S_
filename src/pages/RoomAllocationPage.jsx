@@ -23,7 +23,7 @@ const RoomAllocationPage = () => {
         try {
             const [roomsRes, allocationsRes] = await Promise.all([
                 supabase.from('rooms').select('*').order('room_number'),
-                supabase.from('room_allocations').select('*, students(id, full_name, course)').eq('is_active', true)
+                supabase.from('room_allocations').select('*, students(id, full_name, course, contact)').eq('is_active', true)
             ]);
 
             if (roomsRes.error) throw roomsRes.error;

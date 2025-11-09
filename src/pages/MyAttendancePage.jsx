@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/ui/PageHeader';
 import { Check, X, Clock, TreePalm, ChevronLeft, ChevronRight, Download, Loader } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'; // Assuming alert component exists
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -25,37 +25,79 @@ const MyAttendancePage = () => {
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
 
-    useEffect(() => {
-        if (studentId) {
-            fetchAttendance();
+    const fetchAttendance = useCallback(async () => {
+        if (!studentId) return;
+        setLoading(true);
+        setError('');
+
+        // The original RPC call `get_monthly_attendance_for_student` is failing due to a server-side error
+        // (column "is_admin" does not exist). As the SQL function cannot be modified,
+        // this logic is re-implemented on the client side to fetch the same data.
+        try {
+            const firstDayOfMonth = new Date(Date.UTC(currentYear, currentMonth, 1));
+            const lastDayOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 1));
+
+            const { data: sessions, error: sessionsError } = await supabase
+                .from('attendance_sessions')
+                .select('id, date')
+                .gte('date', firstDayOfMonth.toISOString())
+                .lt('date', lastDayOfMonth.toISOString());
+
+            if (sessionsError) throw sessionsError;
+
+            if (!sessions || sessions.length === 0) {
+                setAttendanceData({});
+                setLoading(false);
+                return;
+            }
+
+            const sessionIds = sessions.map(s => s.id);
+
+            const { data: records, error: recordsError } = await supabase
+                .from('attendance_records')
+                .select('status, session_id')
+                .eq('student_id', studentId)
+                .in('session_id', sessionIds);
+
+            if (recordsError) throw recordsError;
+
+            const dailyRecords = {};
+            records.forEach(record => {
+                const session = sessions.find(s => s.id === record.session_id);
+                if (session) {
+                    const dayOfMonth = new Date(session.date).getUTCDate();
+                    if (!dailyRecords[dayOfMonth]) {
+                        dailyRecords[dayOfMonth] = [];
+                    }
+                    dailyRecords[dayOfMonth].push(record.status);
+                }
+            });
+
+            const statusPriority = { 'Holiday': 4, 'Absent': 3, 'Leave': 2, 'Present': 1 };
+            const finalAttendance = {};
+            for (const day in dailyRecords) {
+                const statuses = dailyRecords[day];
+                if (statuses.length > 0) {
+                    const highestPriorityStatus = statuses.reduce((a, b) => 
+                        (statusPriority[a] || 0) > (statusPriority[b] || 0) ? a : b
+                    );
+                    finalAttendance[day] = highestPriorityStatus;
+                }
+            }
+            
+            setAttendanceData(finalAttendance);
+        } catch (e) {
+            setError('Failed to fetch attendance data. This may be due to row-level security policies. Please contact an administrator.');
+            console.error(e);
+            setAttendanceData({});
+        } finally {
+            setLoading(false);
         }
     }, [studentId, currentMonth, currentYear]);
 
-    const fetchAttendance = async () => {
-        setLoading(true);
-        setError('');
-        const { data, error: rpcError } = await supabase.rpc('get_monthly_attendance_for_student', {
-            p_student_id: studentId,
-            p_month: currentMonth + 1,
-            p_year: currentYear
-        });
-
-        if (rpcError) {
-            setError('Failed to fetch attendance data.');
-            console.error(rpcError);
-            setAttendanceData({});
-        } else {
-            const dataMap = (data || []).reduce((acc, record) => {
-                // Adjust for timezone issues by creating date in UTC
-                const recordDate = new Date(record.day);
-                const dayOfMonth = recordDate.getUTCDate();
-                acc[dayOfMonth] = record.status;
-                return acc;
-            }, {});
-            setAttendanceData(dataMap);
-        }
-        setLoading(false);
-    };
+    useEffect(() => {
+        fetchAttendance();
+    }, [fetchAttendance]);
 
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();

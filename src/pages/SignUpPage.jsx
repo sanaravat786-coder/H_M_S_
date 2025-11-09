@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Users, Loader, Phone } from 'lucide-react';
+import { User, Mail, Lock, Users, Loader, Phone, BookOpen, BedDouble, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import Logo from '../components/ui/Logo';
@@ -12,24 +12,33 @@ function SignUpPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [mobileNumber, setMobileNumber] = useState('');
+    const [course, setCourse] = useState('');
     const [role, setRole] = useState('Student');
+    const [joiningDate, setJoiningDate] = useState(new Date().toISOString().slice(0, 10));
+    const [roomNumber, setRoomNumber] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSignUp = async (e) => {
         e.preventDefault();
         setLoading(true);
 
-        // Provide full_name, role, and mobile_number in the metadata during sign-up.
-        // This is required by the backend trigger to create the user profile correctly.
+        const optionsData = {
+            full_name: fullName,
+            role: role,
+            mobile_number: mobileNumber,
+            joining_date: joiningDate,
+            room_number: roomNumber,
+        };
+
+        if (role === 'Student') {
+            optionsData.course = course;
+        }
+
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
             options: {
-                data: {
-                    full_name: fullName,
-                    role: role,
-                    mobile_number: mobileNumber,
-                },
+                data: optionsData,
                 emailRedirectTo: `${window.location.origin}/`
             }
         });
@@ -70,7 +79,7 @@ function SignUpPage() {
                         <p className="text-base-content-secondary dark:text-dark-base-content-secondary mt-2">Let's get you set up.</p>
                     </div>
 
-                    <form className="space-y-6" onSubmit={handleSignUp}>
+                    <form className="space-y-4" onSubmit={handleSignUp}>
                         <div>
                             <label htmlFor="fullName" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">
                                 Full Name
@@ -177,7 +186,71 @@ function SignUpPage() {
                             </div>
                         </div>
 
-                        <div>
+                        {role === 'Student' && (
+                            <>
+                                <div>
+                                    <label htmlFor="course" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">
+                                        Course
+                                    </label>
+                                    <div className="mt-1 relative rounded-md shadow-sm">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <BookOpen className="h-5 w-5 text-gray-400" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            name="course"
+                                            id="course"
+                                            value={course}
+                                            onChange={(e) => setCourse(e.target.value)}
+                                            className="block w-full rounded-lg border-base-300 dark:border-dark-base-300 bg-base-200 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content pl-10 py-3 focus:border-primary dark:focus:border-dark-primary focus:ring-primary dark:focus:ring-dark-primary sm:text-sm"
+                                            placeholder="e.g. Computer Science"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="joiningDate" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">
+                                        Joining Date
+                                    </label>
+                                    <div className="mt-1 relative rounded-md shadow-sm">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <Calendar className="h-5 w-5 text-gray-400" />
+                                        </div>
+                                        <input
+                                            type="date"
+                                            name="joiningDate"
+                                            id="joiningDate"
+                                            value={joiningDate}
+                                            onChange={(e) => setJoiningDate(e.target.value)}
+                                            className="block w-full rounded-lg border-base-300 dark:border-dark-base-300 bg-base-200 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content pl-10 py-3 focus:border-primary dark:focus:border-dark-primary focus:ring-primary dark:focus:ring-dark-primary sm:text-sm"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="roomNumber" className="block text-sm font-medium text-base-content-secondary dark:text-dark-base-content-secondary">
+                                        Room Number (Optional)
+                                    </label>
+                                    <div className="mt-1 relative rounded-md shadow-sm">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <BedDouble className="h-5 w-5 text-gray-400" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            name="roomNumber"
+                                            id="roomNumber"
+                                            value={roomNumber}
+                                            onChange={(e) => setRoomNumber(e.target.value)}
+                                            className="block w-full rounded-lg border-base-300 dark:border-dark-base-300 bg-base-200 dark:bg-dark-base-200 text-base-content dark:text-dark-base-content pl-10 py-3 focus:border-primary dark:focus:border-dark-primary focus:ring-primary dark:focus:ring-dark-primary sm:text-sm"
+                                            placeholder="e.g. A-101"
+                                        />
+                                    </div>
+                                    <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">Warning: Only fill this if a room has been pre-allocated by an administrator. Room allocation is typically handled after registration.</p>
+                                </div>
+                            </>
+                        )}
+
+                        <div className="pt-2">
                             <button
                                 type="submit"
                                 disabled={loading}

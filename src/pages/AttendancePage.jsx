@@ -48,9 +48,10 @@ const AttendancePage = () => {
     const fetchAttendance = async () => {
         setLoading(true);
         setError('');
+        const sessionTypeForDb = session === 'morning' ? 'Morning' : 'Evening';
         const { data: sessionData, error: sessionError } = await supabase.rpc('get_or_create_session', {
             p_date: date,
-            p_session_type: session
+            p_session_type: sessionTypeForDb
         });
 
         if (sessionError) {
@@ -83,10 +84,7 @@ const AttendancePage = () => {
         setAttendance(prev => ({ ...prev, [studentId]: status }));
     };
     
-    const statuses = ['Present', 'Absent', 'Leave', 'Holiday'];
     const statusIcons = {
-        'Present': <Check className="h-5 w-5 text-green-500" />,
-        'Absent': <X className="h-5 w-5 text-red-500" />,
         'Leave': <Clock className="h-5 w-5 text-yellow-500" />,
         'Holiday': <TreePalm className="h-5 w-5 text-blue-500" />
     };
@@ -97,9 +95,10 @@ const AttendancePage = () => {
         setError('');
         setSuccess('');
 
+        const sessionTypeForDb = session === 'morning' ? 'Morning' : 'Evening';
         const { data: sessionData, error: sessionError } = await supabase.rpc('get_or_create_session', {
             p_date: date,
-            p_session_type: session
+            p_session_type: sessionTypeForDb
         });
 
         if (sessionError) {
@@ -185,10 +184,8 @@ const AttendancePage = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center space-x-2">
-                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
-                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
-                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
-                                                <div className="h-8 w-8 bg-base-200 dark:bg-dark-base-300 rounded-full animate-pulse"></div>
+                                                <div className="h-8 w-24 bg-base-200 dark:bg-dark-base-300 rounded-lg animate-pulse"></div>
+                                                <div className="h-8 w-24 bg-base-200 dark:bg-dark-base-300 rounded-lg animate-pulse"></div>
                                             </div>
                                         </td>
                                     </tr>
@@ -202,18 +199,37 @@ const AttendancePage = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center space-x-2">
-                                            {statuses.map(status => (
+                                        <div className="flex items-center space-x-4">
+                                            <div className="flex items-center space-x-2">
                                                 <button
-                                                    key={status}
                                                     type="button"
-                                                    onClick={() => handleAttendanceChange(student.id, status)}
-                                                    className={`p-2 rounded-full transition-transform transform hover:scale-110 ${attendance[student.id] === status ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-100 dark:ring-offset-dark-base-200' : 'opacity-50 hover:opacity-100'}`}
-                                                    title={status}
+                                                    onClick={() => handleAttendanceChange(student.id, 'Present')}
+                                                    className={`px-4 py-2 text-sm font-semibold rounded-lg flex items-center gap-2 transition-all transform hover:scale-105 ${attendance[student.id] === 'Present' ? 'bg-green-500 text-white shadow-lg' : 'bg-base-200 dark:bg-dark-base-300 text-base-content-secondary'}`}
                                                 >
-                                                    {statusIcons[status]}
+                                                    <Check size={16} /> Present
                                                 </button>
-                                            ))}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleAttendanceChange(student.id, 'Absent')}
+                                                    className={`px-4 py-2 text-sm font-semibold rounded-lg flex items-center gap-2 transition-all transform hover:scale-105 ${attendance[student.id] === 'Absent' ? 'bg-red-500 text-white shadow-lg' : 'bg-base-200 dark:bg-dark-base-300 text-base-content-secondary'}`}
+                                                >
+                                                    <X size={16} /> Absent
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="flex items-center space-x-2">
+                                                {Object.entries(statusIcons).map(([status, icon]) => (
+                                                    <button
+                                                        key={status}
+                                                        type="button"
+                                                        onClick={() => handleAttendanceChange(student.id, status)}
+                                                        className={`p-2 rounded-full transition-transform transform hover:scale-110 ${attendance[student.id] === status ? 'ring-2 ring-primary ring-offset-2 ring-offset-base-100 dark:ring-offset-dark-base-200' : 'opacity-50 hover:opacity-100'}`}
+                                                        title={status}
+                                                    >
+                                                        {icon}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>

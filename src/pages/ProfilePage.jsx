@@ -8,12 +8,12 @@ import ChangePasswordModal from '../components/profile/ChangePasswordModal';
 
 const ProfileInfoItem = ({ icon, label, value }) => (
     <div className="flex items-start py-4">
-        <div className="p-2 bg-primary/10 text-primary rounded-full mr-4">
+        <div className="p-2 bg-primary/10 text-primary rounded-full mr-4 flex-shrink-0">
             {icon}
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
             <p className="text-sm text-base-content-secondary dark:text-dark-base-content-secondary">{label}</p>
-            <p className="font-semibold text-base-content dark:text-dark-base-content">{value || 'N/A'}</p>
+            <p className="font-semibold text-base-content dark:text-dark-base-content break-words">{value || 'N/A'}</p>
         </div>
     </div>
 );
@@ -26,14 +26,42 @@ const ProfilePage = () => {
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
     const fetchProfile = useCallback(async () => {
+        if (!user) return;
         setLoading(true);
         try {
-            const { data, error } = await supabase.rpc('get_user_profile_details', { p_user_id: user.id });
-            if (error) throw error;
-            setProfile(data[0]);
+            const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+
+            if (profileError) throw profileError;
+
+            let finalProfile = {
+                ...profileData,
+                email: user.email,
+                role: user.user_metadata.role,
+                room_number: 'N/A'
+            };
+
+            if (finalProfile.role === 'Student') {
+                const { data: allocationData, error: allocationError } = await supabase
+                    .from('room_allocations')
+                    .select('rooms(room_number)')
+                    .eq('student_id', user.id)
+                    .eq('is_active', true)
+                    .maybeSingle();
+                
+                if (!allocationError && allocationData && allocationData.rooms) {
+                    finalProfile.room_number = allocationData.rooms.room_number;
+                }
+            }
+            
+            setProfile(finalProfile);
+
         } catch (error) {
             toast.error('Failed to fetch profile details.');
-            console.error(error);
+            console.error("Profile fetch error:", error);
         } finally {
             setLoading(false);
         }
@@ -58,6 +86,11 @@ const ProfilePage = () => {
         const names = name.split(' ');
         return names.length > 1 ? `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase() : name.substring(0, 2).toUpperCase();
     };
+
+    const joiningDate = profile.joining_date ? new Date(profile.joining_date) : new Date(profile.created_at);
+    // Add timezone offset to prevent date from being off by one day
+    joiningDate.setMinutes(joiningDate.getMinutes() + joiningDate.getTimezoneOffset());
+
 
     return (
         <>
@@ -101,7 +134,7 @@ const ProfilePage = () => {
                                 {profile.role === 'Student' && <ProfileInfoItem icon={<BedDouble size={20} />} label="Room Number" value={profile.room_number} />}
                             </div>
                             <div className="md:pl-6">
-                                <ProfileInfoItem icon={<Calendar size={20} />} label="Joined On" value={new Date(profile.created_at).toLocaleDateString()} />
+                                <ProfileInfoItem icon={<Calendar size={20} />} label="Joined On" value={joiningDate.toLocaleDateString()} />
                             </div>
                         </div>
                     </div>

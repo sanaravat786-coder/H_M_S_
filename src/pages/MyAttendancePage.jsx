@@ -41,6 +41,29 @@ const AttendanceCalendar = ({ data, month, year }) => {
     );
 };
 
+const Legend = () => {
+    const items = [
+        { color: 'bg-green-500/80', label: 'Present' },
+        { color: 'bg-red-500/80', label: 'Absent' },
+        { color: 'bg-yellow-500/80', label: 'Late' },
+        { color: 'bg-blue-500/80', label: 'Excused' },
+        { color: 'bg-base-300/50 dark:bg-dark-base-300/50', label: 'Unmarked' },
+    ];
+    return (
+        <div className="bg-base-100 dark:bg-dark-base-200 p-6 rounded-xl shadow-lg">
+            <h4 className="font-bold mb-4">Legend</h4>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                {items.map(item => (
+                    <div key={item.label} className="flex items-center">
+                        <span className={`w-3 h-3 rounded-full mr-2 ${item.color}`}></span>
+                        <span className="text-base-content dark:text-dark-base-content">{item.label}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 const MyAttendancePage = () => {
     const { user } = useAuth();
     const [date, setDate] = useState(new Date());
@@ -56,7 +79,6 @@ const MyAttendancePage = () => {
                 const month = date.getMonth() + 1;
                 const year = date.getFullYear();
                 
-                // This RPC needs to be created in Supabase
                 const { data, error } = await supabase.rpc('student_attendance_calendar', {
                     p_student_id: user.id,
                     p_month: month,
@@ -66,7 +88,6 @@ const MyAttendancePage = () => {
                 if (error) throw error;
                 setCalendarData(data || []);
 
-                // Calculate stats
                 let present = 0, absent = 0, late = 0, excused = 0;
                 (data || []).forEach(rec => {
                     if (rec.status === 'Present') present++;
@@ -128,6 +149,7 @@ const MyAttendancePage = () => {
                             <li className="flex justify-between items-center border-t border-base-200 dark:border-dark-base-300 mt-2 pt-2"><strong>Total Marked</strong><strong>{stats.total}</strong></li>
                         </ul>
                     </div>
+                    <Legend />
                 </div>
             </div>
         </>

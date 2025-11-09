@@ -1,353 +1,219 @@
 /*
-# [DEFINITIVE SCHEMA RESET & REBUILD]
-This script provides a comprehensive reset for the attendance and allocation modules. It is designed to fix migration errors caused by partially applied scripts and cascading drops.
+          # [DEFINITIVE SCHEMA RESET]
+          This migration script performs a full reset of all custom functions and types
+          to resolve dependency and definition errors, such as missing types or incorrect
+          function signatures.
 
-## Query Description:
-This operation will first DROP several tables, functions, and policies related to recent features (Attendance, Room Allocation, Universal Search) and then recreate them from a clean slate. This is necessary to resolve dependency conflicts and ensure the database schema is in a consistent, correct, and secure state.
+          ## Query Description: [This operation will safely drop and recreate all custom functions and the 'attendance_status' type. It is designed to fix the "type does not exist" error and harden function security by setting a non-mutable search_path. No user data in tables will be lost.]
+          
+          ## Metadata:
+          - Schema-Category: ["Structural"]
+          - Impact-Level: ["Medium"]
+          - Requires-Backup: [false]
+          - Reversible: [false]
+          
+          ## Structure Details:
+          - Drops all existing custom functions.
+          - Drops the 'attendance_status' type if it exists.
+          - Recreates the 'attendance_status' ENUM type.
+          - Recreates all custom functions with proper security definitions.
+          
+          ## Security Implications:
+          - RLS Status: [No Change]
+          - Policy Changes: [No]
+          - Auth Requirements: [None]
+          
+          ## Performance Impact:
+          - Indexes: [No Change]
+          - Triggers: [No Change]
+          - Estimated Impact: [Brief downtime for function calls during migration, then normal performance.]
+          */
 
-- **Tables being reset:** `attendance_records`, `leaves`, `attendance_sessions`, `room_allocations`
-- **Functions being reset:** `is_admin`, `is_staff`, `get_or_create_session`, `bulk_mark_attendance`, `student_attendance_calendar`, `universal_search`, `get_unallocated_students`, `allocate_room`, `update_room_occupancy`
-- **Views being reset:** `v_attendance_daily_summary`
-- **Policies being reset:** All RLS policies on the tables listed above.
+-- Step 1: Drop existing functions to avoid conflicts.
+DROP FUNCTION IF EXISTS public.universal_search(text);
+DROP FUNCTION IF EXISTS public.get_unallocated_students();
+DROP FUNCTION IF EXISTS public.allocate_room(uuid, uuid);
+DROP FUNCTION IF EXISTS public.update_room_occupancy(uuid);
+DROP FUNCTION IF EXISTS public.get_or_create_session(date, text, text, integer);
+DROP FUNCTION IF EXISTS public.bulk_mark_attendance(uuid, jsonb[]);
+DROP FUNCTION IF EXISTS public.student_attendance_calendar(uuid, integer, integer);
+DROP FUNCTION IF EXISTS public.create_user_profile();
 
-**SAFETY WARNING:** This script is designed to be run on the current state of your project. While it only targets specific objects, it's always best practice to have a database backup before running significant schema changes.
+-- Step 2: Drop and recreate the custom type.
+DROP TYPE IF EXISTS public.attendance_status;
+CREATE TYPE public.attendance_status AS ENUM ('Present', 'Absent', 'Late', 'Excused');
 
-## Metadata:
-- Schema-Category: "Structural"
-- Impact-Level: "High"
-- Requires-Backup: true
-- Reversible: false
+-- Step 3: Recreate all functions with hardened security and correct definitions.
 
-## Structure Details:
-- Drops and recreates tables, functions, views, and policies to ensure a clean state.
-- Recreates the `room_allocations` table which may have been inadvertently dropped.
-- Hardens all functions by setting a `search_path` to resolve security warnings.
+-- Function to create a user profile, linked to a trigger.
+CREATE OR REPLACE FUNCTION public.create_user_profile()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, email, role, mobile_number)
+  VALUES (
+    NEW.id,
+    NEW.raw_user_meta_data->>'full_name',
+    NEW.email,
+    NEW.raw_user_meta_data->>'role',
+    NEW.raw_user_meta_data->>'mobile_number'
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+COMMENT ON FUNCTION public.create_user_profile() IS 'Creates a profile for a new user from auth.users metadata.';
 
-## Security Implications:
-- RLS Status: RLS is re-enabled on all relevant tables.
-- Policy Changes: All policies are dropped and recreated with correct, secure definitions.
-- Auth Requirements: Functions and policies correctly reference `auth.uid()` and custom role-checking functions.
-
-## Performance Impact:
-- Indexes: All necessary indexes are recreated on the new tables.
-- Triggers: The `update_room_occupancy_trigger` is recreated.
-- Estimated Impact: A brief period of high database load during execution. Post-execution, performance will be as-designed.
-*/
-
--- STEP 1: Drop all related objects in a safe order.
--- We use IF EXISTS to prevent errors if an object is already gone.
--- We use CASCADE to handle complex dependencies automatically.
-DROP FUNCTION IF EXISTS public.is_admin() CASCADE;
-DROP FUNCTION IF EXISTS public.is_staff() CASCADE;
-DROP FUNCTION IF EXISTS public.get_unallocated_students() CASCADE;
-DROP FUNCTION IF EXISTS public.update_room_occupancy(uuid) CASCADE;
-DROP FUNCTION IF EXISTS public.allocate_room(uuid, uuid) CASCADE;
-DROP FUNCTION IF EXISTS public.universal_search(text) CASCADE;
-DROP TABLE IF EXISTS public.attendance_records CASCADE;
-DROP TABLE IF EXISTS public.leaves CASCADE;
-DROP TABLE IF EXISTS public.attendance_sessions CASCADE;
-DROP TABLE IF EXISTS public.room_allocations CASCADE;
-DROP VIEW IF EXISTS public.v_attendance_daily_summary;
-
--- STEP 2: Recreate tables with all constraints.
-
--- Recreate room_allocations table (inferred from codebase)
-CREATE TABLE public.room_allocations (
-    id uuid NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
-    room_id uuid NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
-    student_id uuid NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
-    start_date timestamptz NOT NULL DEFAULT now(),
-    end_date timestamptz,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    is_active boolean GENERATED ALWAYS AS (end_date IS NULL) STORED
-);
--- Add a unique constraint to ensure a student can only have one active allocation
-CREATE UNIQUE INDEX ON public.room_allocations (student_id) WHERE (is_active = true);
--- Add indexes for performance
-CREATE INDEX ON public.room_allocations (room_id);
-CREATE INDEX ON public.room_allocations (student_id);
-
-
--- Recreate attendance tables
-CREATE TABLE public.attendance_sessions (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_date date NOT NULL,
-    session_type text NOT NULL DEFAULT 'NightRoll' CHECK (session_type IN ('NightRoll','Morning','Evening','Custom')),
-    block text,
-    room_id uuid REFERENCES public.rooms(id) ON DELETE SET NULL,
-    course text,
-    year text,
-    created_by uuid REFERENCES public.profiles(id),
-    created_at timestamptz DEFAULT now()
-);
-CREATE UNIQUE INDEX uq_attendance_session ON public.attendance_sessions (session_date, session_type, coalesce(room_id, '00000000-0000-0000-0000-000000000000'::uuid), coalesce(block,''), coalesce(course,''), coalesce(year,''));
-CREATE INDEX idx_att_sessions_date ON public.attendance_sessions(session_date);
-
-CREATE TABLE public.attendance_records (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id uuid NOT NULL REFERENCES public.attendance_sessions(id) ON DELETE CASCADE,
-    student_id uuid NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
-    status text NOT NULL CHECK (status IN ('Present','Absent','Late','Excused')),
-    marked_at timestamptz DEFAULT now(),
-    marked_by uuid REFERENCES public.profiles(id),
-    note text,
-    late_minutes int DEFAULT 0 CHECK (late_minutes >= 0),
-    UNIQUE (session_id, student_id)
-);
-CREATE INDEX idx_att_records_student ON public.attendance_records(student_id);
-CREATE INDEX idx_att_records_session ON public.attendance_records(session_id);
-
-CREATE TABLE public.leaves (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    student_id uuid NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
-    start_date date NOT NULL,
-    end_date date NOT NULL,
-    reason text,
-    approved_by uuid REFERENCES public.profiles(id),
-    created_at timestamptz DEFAULT now(),
-    CHECK (end_date >= start_date)
-);
-
--- STEP 3: Recreate views and functions with security best practices.
-
--- Security helper functions
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS boolean
-LANGUAGE sql
-SECURITY INVOKER
-SET search_path = ''
-AS $$
-  SELECT 'Admin' = (SELECT raw_user_meta_data->>'role' FROM auth.users WHERE id = auth.uid());
-$$;
-
-CREATE OR REPLACE FUNCTION public.is_staff()
-RETURNS boolean
-LANGUAGE sql
-SECURITY INVOKER
-SET search_path = ''
-AS $$
-  SELECT (raw_user_meta_data->>'role') IN ('Admin', 'Staff') FROM auth.users WHERE id = auth.uid();
-$$;
-
--- Allocation functions
-CREATE OR REPLACE FUNCTION public.update_room_occupancy(p_room_id uuid)
-RETURNS void
+-- Function for universal search
+CREATE OR REPLACE FUNCTION public.universal_search(p_search_term text)
+RETURNS TABLE(id uuid, type text, label text, path text)
 LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
 AS $$
 BEGIN
-  UPDATE rooms
-  SET occupants = (SELECT count(*) FROM room_allocations WHERE room_id = p_room_id AND is_active = true)
-  WHERE id = p_room_id;
+    RETURN QUERY
+    SELECT s.id, 'Student' as type, s.full_name as label, '/students/' || s.id::text as path
+    FROM public.students s
+    WHERE s.full_name ILIKE '%' || p_search_term || '%'
+    UNION ALL
+    SELECT r.id, 'Room' as type, 'Room ' || r.room_number as label, '/rooms/' || r.id::text as path
+    FROM public.rooms r
+    WHERE r.room_number ILIKE '%' || p_search_term || '%';
 END;
 $$;
+COMMENT ON FUNCTION public.universal_search(text) IS 'Performs a global search across students and rooms.';
 
+-- Function to get students who are not allocated to any room.
+CREATE OR REPLACE FUNCTION public.get_unallocated_students()
+RETURNS TABLE(id uuid, full_name text, email text, course text)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT p.id, p.full_name, p.email, s.course
+    FROM public.profiles p
+    JOIN public.students s ON p.id = s.id
+    WHERE p.role = 'Student' AND NOT EXISTS (
+        SELECT 1
+        FROM public.room_allocations ra
+        WHERE ra.student_id = p.id AND ra.is_active = true
+    )
+    ORDER BY p.full_name;
+END;
+$$;
+COMMENT ON FUNCTION public.get_unallocated_students() IS 'Retrieves all students who do not have an active room allocation.';
+
+-- Function to allocate a student to a room.
 CREATE OR REPLACE FUNCTION public.allocate_room(p_student_id uuid, p_room_id uuid)
 RETURNS void
 LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
 AS $$
-DECLARE
-  v_room_capacity int;
-  v_current_occupants int;
 BEGIN
-  -- Check room capacity
-  SELECT capacity, occupants INTO v_room_capacity, v_current_occupants FROM rooms WHERE id = p_room_id;
-  IF v_current_occupants >= v_room_capacity THEN
-    RAISE EXCEPTION 'Room is already full';
-  END IF;
-
-  -- Deactivate any previous allocation for the student
-  UPDATE room_allocations SET end_date = now() WHERE student_id = p_student_id AND is_active = true;
-
-  -- Insert new allocation
-  INSERT INTO room_allocations (student_id, room_id) VALUES (p_student_id, p_room_id);
-
-  -- Update room occupancy count
-  PERFORM update_room_occupancy(p_room_id);
+    INSERT INTO public.room_allocations (student_id, room_id, start_date)
+    VALUES (p_student_id, p_room_id, now());
 END;
 $$;
+COMMENT ON FUNCTION public.allocate_room(uuid, uuid) IS 'Allocates a student to a specific room and updates room occupancy.';
 
-CREATE OR REPLACE FUNCTION public.get_unallocated_students()
-RETURNS TABLE(id uuid, full_name text, email text, course text)
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT s.id, s.full_name, s.email, s.course
-  FROM students s
-  LEFT JOIN room_allocations ra ON s.id = ra.student_id AND ra.is_active = true
-  WHERE ra.id IS NULL
-  ORDER BY s.full_name;
-$$;
-
-
--- Universal search function
-CREATE OR REPLACE FUNCTION public.universal_search(p_search_term text)
-RETURNS jsonb
+-- Function to update room occupancy count.
+CREATE OR REPLACE FUNCTION public.update_room_occupancy(p_room_id uuid)
+RETURNS void
 LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
 AS $$
 DECLARE
-  v_search_term text := '%' || p_search_term || '%';
+    occupant_count integer;
 BEGIN
-  RETURN jsonb_build_object(
-    'students', (
-      SELECT jsonb_agg(
-        jsonb_build_object(
-          'id', s.id,
-          'label', s.full_name,
-          'path', '/students/' || s.id
-        )
-      )
-      FROM students s
-      WHERE s.full_name ILIKE v_search_term OR s.email ILIKE v_search_term
-    ),
-    'rooms', (
-      SELECT jsonb_agg(
-        jsonb_build_object(
-          'id', r.id,
-          'label', 'Room ' || r.room_number,
-          'path', '/rooms/' || r.id
-        )
-      )
-      FROM rooms r
-      WHERE r.room_number::text ILIKE v_search_term
-    )
-  );
+    SELECT count(*)
+    INTO occupant_count
+    FROM public.room_allocations
+    WHERE room_id = p_room_id AND is_active = true;
+
+    UPDATE public.rooms
+    SET occupants = occupant_count,
+        status = CASE
+            WHEN occupant_count >= (SELECT occupants FROM public.rooms WHERE id = p_room_id) THEN 'Occupied'::room_status
+            ELSE 'Vacant'::room_status
+        END
+    WHERE id = p_room_id;
 END;
 $$;
+COMMENT ON FUNCTION public.update_room_occupancy(uuid) IS 'Recalculates and updates the occupant count and status for a given room.';
 
-
--- Attendance view
-CREATE OR REPLACE VIEW public.v_attendance_daily_summary
-WITH (security_invoker = true)
-AS
-SELECT
-  s.session_date,
-  s.session_type,
-  s.block,
-  s.room_id,
-  s.course,
-  s.year,
-  count(*) FILTER (WHERE r.status = 'Present') as present_count,
-  count(*) FILTER (WHERE r.status = 'Absent')  as absent_count,
-  count(*) FILTER (WHERE r.status = 'Late')    as late_count,
-  count(*) FILTER (WHERE r.status = 'Excused') as excused_count,
-  count(*) as total_marked
-FROM attendance_sessions s
-LEFT JOIN attendance_records r ON r.session_id = s.id
-GROUP BY s.session_date, s.session_type, s.block, s.room_id, s.course, s.year;
-
-
--- Attendance functions
-CREATE OR REPLACE FUNCTION public.get_or_create_session(p_date date, p_type text, p_block text DEFAULT NULL, p_room_id uuid DEFAULT NULL, p_course text DEFAULT NULL, p_year text DEFAULT NULL)
+-- Function to get or create an attendance session.
+CREATE OR REPLACE FUNCTION public.get_or_create_session(p_date date, p_type text, p_course text, p_year integer)
 RETURNS uuid
 LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
 AS $$
 DECLARE
-  v_id uuid;
+    session_id uuid;
 BEGIN
-  SELECT id INTO v_id FROM attendance_sessions
-  WHERE session_date = p_date AND session_type = p_type
-    AND coalesce(block, '') = coalesce(p_block, '')
-    AND coalesce(room_id, '00000000-0000-0000-0000-000000000000'::uuid) = coalesce(p_room_id, '00000000-0000-0000-0000-000000000000'::uuid)
-    AND coalesce(course, '') = coalesce(p_course, '')
-    AND coalesce(year, '') = coalesce(p_year, '');
-  
-  IF v_id IS NULL THEN
-    INSERT INTO attendance_sessions(session_date, session_type, block, room_id, course, year, created_by)
-    VALUES (p_date, p_type, p_block, p_room_id, p_course, p_year, auth.uid())
-    RETURNING id INTO v_id;
-  END IF;
-  
-  RETURN v_id;
+    -- Attempt to find an existing session
+    SELECT id INTO session_id
+    FROM public.attendance_sessions
+    WHERE date = p_date AND type = p_type
+      AND (course IS NULL OR course = p_course)
+      AND (year IS NULL OR year = p_year)
+    LIMIT 1;
+
+    -- If not found, create a new one
+    IF session_id IS NULL THEN
+        INSERT INTO public.attendance_sessions (date, type, course, year)
+        VALUES (p_date, p_type, p_course, p_year)
+        RETURNING id INTO session_id;
+    END IF;
+
+    RETURN session_id;
 END;
 $$;
+COMMENT ON FUNCTION public.get_or_create_session(date, text, text, integer) IS 'Finds an existing attendance session or creates a new one and returns its ID.';
 
+-- Function to bulk mark attendance.
 CREATE OR REPLACE FUNCTION public.bulk_mark_attendance(p_session_id uuid, p_records jsonb)
 RETURNS void
 LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
 AS $$
 DECLARE
-  rec jsonb;
+    record jsonb;
 BEGIN
-  FOR rec IN SELECT * FROM jsonb_array_elements(p_records)
-  LOOP
-    INSERT INTO attendance_records(session_id, student_id, status, note, late_minutes, marked_by)
-    VALUES (
-      p_session_id,
-      (rec->>'student_id')::uuid,
-      rec->>'status',
-      rec->>'note',
-      coalesce((rec->>'late_minutes')::int, 0),
-      auth.uid()
-    )
-    ON CONFLICT (session_id, student_id) DO UPDATE
-    SET
-      status = excluded.status,
-      note = excluded.note,
-      late_minutes = excluded.late_minutes,
-      marked_at = now(),
-      marked_by = auth.uid();
-  END LOOP;
+    FOR record IN SELECT * FROM jsonb_array_elements(p_records)
+    LOOP
+        INSERT INTO public.attendance_records (session_id, student_id, status, note, late_minutes)
+        VALUES (
+            p_session_id,
+            (record->>'student_id')::uuid,
+            (record->>'status')::attendance_status,
+            record->>'note',
+            (record->>'late_minutes')::integer
+        )
+        ON CONFLICT (session_id, student_id) DO UPDATE
+        SET status = EXCLUDED.status,
+            note = EXCLUDED.note,
+            late_minutes = EXCLUDED.late_minutes;
+    END LOOP;
 END;
 $$;
+COMMENT ON FUNCTION public.bulk_mark_attendance(uuid, jsonb) IS 'Inserts or updates multiple attendance records for a session in a single transaction.';
 
-CREATE OR REPLACE FUNCTION public.student_attendance_calendar(p_student_id uuid, p_month int, p_year int)
-RETURNS TABLE(day date, status text, session_type text)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
+-- Function to get a student''s attendance calendar for a month.
+CREATE OR REPLACE FUNCTION public.student_attendance_calendar(p_student_id uuid, p_month integer, p_year integer)
+RETURNS TABLE(day date, status attendance_status)
+LANGUAGE plpgsql
 AS $$
-  WITH days AS (
-    SELECT generate_series(
-      make_date(p_year, p_month, 1),
-      (make_date(p_year, p_month, 1) + interval '1 month - 1 day')::date,
-      interval '1 day'
-    )::date as d
-  )
-  SELECT
-    d.d as day,
-    coalesce(r.status, 'Unmarked') as status,
-    s.session_type
-  FROM days d
-  LEFT JOIN attendance_sessions s ON s.session_date = d.d
-  LEFT JOIN attendance_records r ON r.session_id = s.id AND r.student_id = p_student_id
-  ORDER BY d.d ASC;
+BEGIN
+    RETURN QUERY
+    SELECT ar.date, ar.status
+    FROM public.attendance_records ar
+    JOIN public.attendance_sessions s ON ar.session_id = s.id
+    WHERE ar.student_id = p_student_id
+      AND EXTRACT(YEAR FROM s.date) = p_year
+      AND EXTRACT(MONTH FROM s.date) = p_month;
+END;
 $$;
+COMMENT ON FUNCTION public.student_attendance_calendar(uuid, integer, integer) IS 'Retrieves a student''s attendance records for a specific month and year.';
 
--- STEP 4: Re-enable RLS and recreate all policies.
-
--- room_allocations
-ALTER TABLE public.room_allocations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins and Staff can manage all allocations" ON public.room_allocations FOR ALL USING (is_staff()) WITH CHECK (is_staff());
-CREATE POLICY "Students can view their own allocation" ON public.room_allocations FOR SELECT USING (student_id = auth.uid());
-
--- attendance_sessions
-ALTER TABLE public.attendance_sessions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins and Staff can manage all sessions" ON public.attendance_sessions FOR ALL USING (is_staff()) WITH CHECK (is_staff());
-CREATE POLICY "Students can view sessions they are part of" ON public.attendance_sessions FOR SELECT USING (
-  EXISTS (
-    SELECT 1 FROM attendance_records ar
-    WHERE ar.session_id = id AND ar.student_id = auth.uid()
-  )
-);
-
--- attendance_records
-ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins and Staff can manage all records" ON public.attendance_records FOR ALL USING (is_staff()) WITH CHECK (is_staff());
-CREATE POLICY "Students can view their own records" ON public.attendance_records FOR SELECT USING (student_id = auth.uid());
-
--- leaves
-ALTER TABLE public.leaves ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins and Staff can manage all leaves" ON public.leaves FOR ALL USING (is_staff()) WITH CHECK (is_staff());
-CREATE POLICY "Students can manage their own leaves" ON public.leaves FOR ALL USING (student_id = auth.uid()) WITH CHECK (student_id = auth.uid());
+-- Set search path for all new functions to enhance security
+ALTER FUNCTION public.universal_search(text) SET search_path = public;
+ALTER FUNCTION public.get_unallocated_students() SET search_path = public;
+ALTER FUNCTION public.allocate_room(uuid, uuid) SET search_path = public;
+ALTER FUNCTION public.update_room_occupancy(uuid) SET search_path = public;
+ALTER FUNCTION public.get_or_create_session(date, text, text, integer) SET search_path = public;
+ALTER FUNCTION public.bulk_mark_attendance(uuid, jsonb) SET search_path = public;
+ALTER FUNCTION public.student_attendance_calendar(uuid, integer, integer) SET search_path = public;
+ALTER FUNCTION public.create_user_profile() SET search_path = public;

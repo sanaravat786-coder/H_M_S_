@@ -19,6 +19,8 @@ import FeeDetailPage from './pages/details/FeeDetailPage';
 import VisitorDetailPage from './pages/details/VisitorDetailPage';
 import MaintenanceDetailPage from './pages/details/MaintenanceDetailPage';
 import RoomAllocationPage from './pages/RoomAllocationPage';
+import AttendancePage from './pages/AttendancePage';
+import MyAttendancePage from './pages/MyAttendancePage';
 
 function App() {
     return (
@@ -42,6 +44,8 @@ function App() {
                         <Route path="/maintenance/:id" element={<MaintenanceDetailPage />} />
                         <Route path="/reports" element={<ReportsPage />} />
                         <Route path="/notices" element={<NoticesPage />} />
+                        <Route path="/attendance" element={<AttendancePage />} />
+                        <Route path="/my-attendance" element={<MyAttendancePage />} />
                     </Route>
                 </Route>
             </Routes>

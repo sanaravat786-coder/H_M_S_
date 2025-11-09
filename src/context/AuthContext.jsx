@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
 const AuthContext = createContext(null);
 
@@ -25,9 +26,19 @@ export const AuthProvider = ({ children }) => {
     setAuthSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      async (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+
+        // If a user has just signed in, ensure their profile exists in the public tables.
+        if (_event === 'SIGNED_IN' && session?.user) {
+          const { error } = await supabase.rpc('create_user_profile_if_not_exists');
+          if (error) {
+            console.error('Error ensuring user profile exists:', error);
+            toast.error('Could not initialize your profile. Please log out and try again.');
+          }
+        }
+        
         setLoading(false);
       }
     );
